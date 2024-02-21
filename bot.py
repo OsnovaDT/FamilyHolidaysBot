@@ -9,8 +9,13 @@ from aiogram.filters import Command, CommandStart
 from aiogram.types import FSInputFile, Message
 from mysql.connector import Error
 
-from constants import (ALL_HOLIDAYS_SQL_QUERY, BOT_COMMANDS, DB_CONNECT,
-                       ERROR_MESSAGE, TOKEN)
+from constants import (
+    ALL_HOLIDAYS_SQL_QUERY,
+    BOT_COMMANDS,
+    DB_CONNECT,
+    ERROR_MESSAGE,
+    TOKEN,
+)
 from utils import get_formatted_holidays
 
 dispatcher = Dispatcher()

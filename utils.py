@@ -19,7 +19,7 @@ async def get_formatted_holidays(holidays: List[TypeHoliday]) -> str:
     if not isinstance(holidays, list):
         logger.error(
             "Wrong «holidays» type - %hd («get_formatted_holidays» func)",
-            holidays
+            holidays,
         )
         return ERROR_MESSAGE
 
@@ -65,7 +65,7 @@ async def _get_days_left(holiday_date: date) -> int | str:
     if not isinstance(holiday_date, date):
         logger.error(
             "Wrong «holiday_date» type - %hd («_get_days_left» func)",
-            holiday_date
+            holiday_date,
         )
         return "Не удалось вычислить"
 
@@ -78,26 +78,26 @@ async def _get_days_left(holiday_date: date) -> int | str:
 async def _get_age_suffix(age: int | str) -> str:
     """Return suffix for the age.
 
-    For example:
-    >>> get_age_suffix(14) = лет
-    >>> get_age_suffix(21) = год
-    >>> get_age_suffix(42) = года
-    >>> get_age_suffix(55) = лет
+    >>> get_age_suffix(-1) = ''
+    >>> get_age_suffix(14) = 'лет'
+    >>> get_age_suffix(21) = 'год'
+    >>> get_age_suffix(42) = 'года'
 
     """
 
-    suffix = ""
+    suffix = "лет"
 
-    if not isinstance(age, (int, str)):
-        return suffix
+    if not isinstance(age, (int, str)) or int(age) <= 0:
+        return ""
 
     age = str(age)
-    first_digit, last_digit = age[0], age[-1]
 
-    if first_digit != "1":
+    if not (age.startswith("1") and len(age) == 2):
+        last_digit = age[-1]
+
         if last_digit == "1":
             suffix = "год"
         elif last_digit in ("2", "3", "4"):
             suffix = "года"
 
-    return suffix or "лет"
+    return suffix
