@@ -4,6 +4,7 @@ from asyncio import run
 from logging import INFO, basicConfig, getLogger
 
 from aiogram import Bot, Dispatcher
+from aiogram.client.default import DefaultBotProperties
 from aiogram.enums import ParseMode
 from aiogram.filters import Command, CommandStart
 from aiogram.types import Message
@@ -79,7 +80,10 @@ async def main() -> None:
     """Main function that runs the bot"""
 
     try:
-        bot = Bot(TOKEN, parse_mode=ParseMode.HTML)
+        bot = Bot(
+            TOKEN, default=DefaultBotProperties(parse_mode=ParseMode.HTML)
+        )
+
         await bot.set_my_commands(BOT_COMMANDS)
         await dispatcher.start_polling(bot)
     except Exception as error:
