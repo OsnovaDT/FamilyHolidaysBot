@@ -3,7 +3,7 @@
 from datetime import date
 from logging import getLogger
 from math import ceil
-from typing import List
+from typing import Dict, List
 
 from constants import ERROR_MESSAGE
 from custom_types import TypeHoliday
@@ -101,3 +101,14 @@ async def _get_age_suffix(age: int | str) -> str:
             suffix = "года"
 
     return suffix
+
+
+def get_bot_commands_to_display(bot_commands: List[Dict[str, str]]) -> str:
+    """Return bot's commands in text to display to the user"""
+
+    return "\n".join(
+        [
+            f"/{command['command']} - {command['description']}"
+            for command in bot_commands
+        ]
+    )

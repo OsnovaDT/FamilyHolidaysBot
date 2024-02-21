@@ -6,62 +6,73 @@ from logging import INFO, basicConfig, getLogger
 from aiogram import Bot, Dispatcher
 from aiogram.enums import ParseMode
 from aiogram.filters import Command, CommandStart
-from aiogram.types import FSInputFile, Message
-from mysql.connector import Error
+from aiogram.types import Message
 
 from constants import (
     ALL_HOLIDAYS_SQL_QUERY,
     BOT_COMMANDS,
-    DB_CONNECT,
-    ERROR_MESSAGE,
+    NEXT_MONTH_HOLIDAYS_SQL_QUERY,
+    THIS_MONTH_HOLIDAYS_SQL_QUERY,
     TOKEN,
 )
-from utils import get_formatted_holidays
+from services import send_sql_query_result_to_user
+from utils import get_bot_commands_to_display
 
 dispatcher = Dispatcher()
-
-cursor = DB_CONNECT.cursor()
 
 logger = getLogger(__name__)
 
 
 @dispatcher.message(CommandStart())
-async def command_start_handler(message: Message) -> None:
-    """Handler for /start command.
+async def start_handler(message: Message) -> None:
+    """Handler for /start command - greets the user"""
 
-    Greets the user.
-
-    """
-
-    # TODO: Add links
+    commands = get_bot_commands_to_display(BOT_COMMANDS)
     await message.answer(
         f"Привет, {message.from_user.full_name}!\n\n"
-        "Вот команды, которые ты можешь использовать:\n"
-        "\\start\n"
-        "\\help\n"
-        "\\all_holidays"
+        f"Вот команды, которые ты можешь использовать:\n{commands}"
     )
 
 
+@dispatcher.message(Command("help"))
+async def help_handler(message: Message) -> None:
+    """Handler for /help command - show all commands for the user"""
+
+    commands = get_bot_commands_to_display(BOT_COMMANDS[1:])
+    await message.answer(commands)
+
+
 @dispatcher.message(Command("all_holidays"))
-async def command_all_holidays_handler(message: Message) -> None:
+async def all_holidays_handler(message: Message) -> None:
     """Handler for /all_holidays command.
 
     Show all family's holidays and birthdays.
 
     """
 
-    try:
-        cursor.execute(ALL_HOLIDAYS_SQL_QUERY)
-        all_holidays = await get_formatted_holidays(cursor.fetchall())
+    await send_sql_query_result_to_user(message, ALL_HOLIDAYS_SQL_QUERY)
 
-        await message.answer(all_holidays)
-    except Error as error:
-        logger.error(error)
-        await message.answer_photo(
-            FSInputFile("photos/tinkoff.jpg"),
-            ERROR_MESSAGE,
-        )
+
+@dispatcher.message(Command("this_month_holidays"))
+async def this_month_holidays_handler(message: Message) -> None:
+    """Handler for /this_month_holidays command.
+
+    Show family's holidays and birthdays that will be in this month.
+
+    """
+
+    await send_sql_query_result_to_user(message, THIS_MONTH_HOLIDAYS_SQL_QUERY)
+
+
+@dispatcher.message(Command("next_month_holidays"))
+async def next_month_holidays_handler(message: Message) -> None:
+    """Handler for /next_month_holidays command.
+
+    Show family's holidays and birthdays that will be in the next month.
+
+    """
+
+    await send_sql_query_result_to_user(message, NEXT_MONTH_HOLIDAYS_SQL_QUERY)
 
 
 async def main() -> None:
