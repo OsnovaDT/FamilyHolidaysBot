@@ -1,12 +1,14 @@
 """Utils of the project"""
 
 from datetime import date
+from logging import getLogger
 from math import ceil
 from typing import List
 
+from constants import ERROR_MESSAGE
 from custom_types import TypeHoliday
 
-# TODO: async
+logger = getLogger(__name__)
 
 
 async def get_formatted_holidays(holidays: List[TypeHoliday]) -> str:
@@ -15,7 +17,11 @@ async def get_formatted_holidays(holidays: List[TypeHoliday]) -> str:
     formatted_holidays = ""
 
     if not isinstance(holidays, list):
-        return formatted_holidays
+        logger.error(
+            "Wrong «holidays» type - %hd («get_formatted_holidays» func)",
+            holidays
+        )
+        return ERROR_MESSAGE
 
     for holiday in holidays:
         formatted_holidays += await _get_formatted_single_holiday(holiday)
@@ -27,6 +33,11 @@ async def _get_formatted_single_holiday(holiday: TypeHoliday) -> str:
     """Format holiday text and return"""
 
     if not isinstance(holiday, tuple):
+        logger.error(
+            "Wrong «holiday» type - %hd "
+            "(«_get_formatted_single_holiday» func)",
+            holiday,
+        )
         return ""
 
     holiday_date, title, is_birthday, whom_to_congratulate = holiday
@@ -48,12 +59,15 @@ async def _get_formatted_single_holiday(holiday: TypeHoliday) -> str:
     return text + "\n\n"
 
 
-async def _get_days_left(holiday_date: date) -> int | None:
+async def _get_days_left(holiday_date: date) -> int | str:
     """Return how many days left until the holiday"""
 
     if not isinstance(holiday_date, date):
-        # TODO: Add log
-        return None
+        logger.error(
+            "Wrong «holiday_date» type - %hd («_get_days_left» func)",
+            holiday_date
+        )
+        return "Не удалось вычислить"
 
     # TODO: Учесть прошедшие даты
     nearest_holiday_date = holiday_date.replace(year=date.today().year)
@@ -73,11 +87,11 @@ async def _get_age_suffix(age: int | str) -> str:
     """
 
     suffix = ""
-    age = str(age)
 
     if not isinstance(age, (int, str)):
         return suffix
 
+    age = str(age)
     first_digit, last_digit = age[0], age[-1]
 
     if first_digit != "1":
