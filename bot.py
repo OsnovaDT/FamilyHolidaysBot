@@ -3,20 +3,29 @@
 from asyncio import run
 from logging import INFO, basicConfig, getLogger
 
-from aiogram import Bot, Dispatcher
+from aiogram import Bot, Dispatcher, F
 from aiogram.client.default import DefaultBotProperties
 from aiogram.enums import ParseMode
 from aiogram.filters import Command, CommandStart
-from aiogram.types import Message
+from aiogram.fsm.context import FSMContext
+from aiogram.types import FSInputFile, Message
 
 from constants import (
     ALL_HOLIDAYS_SQL_QUERY,
+    ALL_MONTHS,
     BOT_COMMANDS,
+    MONTHS_NUMBERS,
     NEXT_MONTH_HOLIDAYS_SQL_QUERY,
+    SPECIFIED_MONTH_HOLIDAYS_SQL_QUERY,
     THIS_MONTH_HOLIDAYS_SQL_QUERY,
     TOKEN,
 )
-from services import send_sql_query_result_to_user
+from services import (
+    get_months_keyboard,
+    send_month_choosing_instruction,
+    send_sql_query_result_to_user,
+)
+from states import MonthStates
 from utils import get_bot_commands_to_display
 
 dispatcher = Dispatcher()
@@ -24,23 +33,35 @@ dispatcher = Dispatcher()
 logger = getLogger(__name__)
 
 
+BOT_COMMANDS_TO_DISPLAY = get_bot_commands_to_display(BOT_COMMANDS)
+
+
 @dispatcher.message(CommandStart())
-async def start_handler(message: Message) -> None:
+async def start_handler(message: Message, state: FSMContext) -> None:
     """Handler for /start command - greets the user"""
 
-    commands = get_bot_commands_to_display(BOT_COMMANDS)
-    await message.answer(
+    await state.set_state(MonthStates.choosing_month)
+
+    greeting_text = (
         f"Привет, {message.from_user.full_name}!\n\n"
-        f"Вот команды, которые ты можешь использовать:\n{commands}"
+        "Я помогу тебе не забыть о важных праздниках твоей семьи! 👨‍👩‍👧‍👦\n\n"
+        "Вот команды, которые ты можешь использовать:\n"
+    ) + BOT_COMMANDS_TO_DISPLAY
+
+    await message.answer_photo(
+        FSInputFile("photos/cat.jpg"),
+        greeting_text,
+        reply_markup=get_months_keyboard(),
     )
+    await send_month_choosing_instruction(message)
 
 
 @dispatcher.message(Command("help"))
 async def help_handler(message: Message) -> None:
     """Handler for /help command - show all commands for the user"""
 
-    commands = get_bot_commands_to_display(BOT_COMMANDS[1:])
-    await message.answer(commands)
+    await message.answer(BOT_COMMANDS_TO_DISPLAY)
+    await send_month_choosing_instruction(message)
 
 
 @dispatcher.message(Command("all_holidays"))
@@ -74,6 +95,21 @@ async def next_month_holidays_handler(message: Message) -> None:
     """
 
     await send_sql_query_result_to_user(message, NEXT_MONTH_HOLIDAYS_SQL_QUERY)
+
+
+@dispatcher.message(MonthStates.choosing_month, F.text.in_(ALL_MONTHS))
+async def specified_month_handler(message: Message):
+    """Handler for choosing specified month.
+
+    Show family's holidays and birthdays that will be in the specified month.
+
+    """
+
+    month = MONTHS_NUMBERS[message.text]
+
+    await send_sql_query_result_to_user(
+        message, SPECIFIED_MONTH_HOLIDAYS_SQL_QUERY.format(month=month)
+    )
 
 
 async def main() -> None:

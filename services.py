@@ -2,10 +2,22 @@
 
 from logging import getLogger
 
-from aiogram.types import FSInputFile, Message
+from aiogram.types import (
+    FSInputFile,
+    KeyboardButton,
+    Message,
+    ReplyKeyboardMarkup,
+)
 from mysql.connector import Error
 
-from constants import DB_CONNECT, ERROR_MESSAGE
+from constants import (
+    AUTUMN_MONTHS,
+    DB_CONNECT,
+    ERROR_MESSAGE,
+    SPRING_MONTHS,
+    SUMMER_MONTHS,
+    WINTER_MONTHS,
+)
 from utils import get_formatted_holidays
 
 cursor = DB_CONNECT.cursor()
@@ -20,12 +32,40 @@ async def send_sql_query_result_to_user(
 
     try:
         cursor.execute(sql_query)
-        holidays = await get_formatted_holidays(cursor.fetchall())
+        holidays = cursor.fetchall()
 
-        await message.answer(holidays)
+        if holidays:
+            holidays_info = await get_formatted_holidays(holidays)
+        else:
+            holidays_info = "Праздников в этот период нет"
+
+        await message.answer(holidays_info)
     except Error as error:
         logger.error(error)
         await message.answer_photo(
             FSInputFile("photos/tinkoff.jpg"),
             ERROR_MESSAGE,
         )
+
+
+def get_months_keyboard() -> ReplyKeyboardMarkup:
+    """Return keyboard with months"""
+
+    keyboard = [
+        [KeyboardButton(text=item) for item in WINTER_MONTHS],
+        [KeyboardButton(text=item) for item in SPRING_MONTHS],
+        [KeyboardButton(text=item) for item in SUMMER_MONTHS],
+        [KeyboardButton(text=item) for item in AUTUMN_MONTHS],
+    ]
+
+    return ReplyKeyboardMarkup(keyboard=keyboard, resize_keyboard=True)
+
+
+async def send_month_choosing_instruction(message: Message) -> None:
+    """Send instruction about month choosing"""
+
+    await message.answer_photo(
+        FSInputFile("photos/month_choosing_button.png"),
+        "Также ты можешь получить <u>праздники в конкретном месяце</u>."
+        " Для этого нажми на эту кнопку 👆",
+    )
