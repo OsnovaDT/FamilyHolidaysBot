@@ -1,42 +1,44 @@
 """Main file with bot logic"""
 
-from asyncio import run
+import asyncio
 from logging import INFO, basicConfig, getLogger
 
-from aiogram import Bot, Dispatcher, F
-from aiogram.client.default import DefaultBotProperties
-from aiogram.enums import ParseMode
+from aiogram import Dispatcher, F
 from aiogram.filters import Command, CommandStart
 from aiogram.fsm.context import FSMContext
-from aiogram.types import FSInputFile, Message
+from aiogram.types import CallbackQuery, FSInputFile, Message
+from apscheduler.schedulers.asyncio import AsyncIOScheduler
 
-from constants import (
+from constants.constants import ALL_MONTHS, BOT, BOT_COMMANDS, MONTHS_NUMBERS
+from constants.queries import (
     ALL_HOLIDAYS_SQL_QUERY,
-    ALL_MONTHS,
-    BOT_COMMANDS,
-    MONTHS_NUMBERS,
     NEXT_MONTH_HOLIDAYS_SQL_QUERY,
     SPECIFIED_MONTH_HOLIDAYS_SQL_QUERY,
     THIS_MONTH_HOLIDAYS_SQL_QUERY,
-    TOKEN,
 )
+from jobs import add_daily_job, run_scheduler
+from keyboards import get_months_keyboard, get_yes_no_inline_keyboard
 from services import (
-    get_months_keyboard,
-    send_month_choosing_instruction,
+    add_new_daily_notification_to_db,
+    delete_daily_notification_from_db,
+    is_daily_notification_exists,
     send_sql_query_result_to_user,
 )
 from states import MonthStates
-from utils import get_bot_commands_to_display
+from utils import get_bot_commands_to_display, send_month_choosing_instruction
 
-dispatcher = Dispatcher()
-
+dp = Dispatcher()
 logger = getLogger(__name__)
 
+scheduler = AsyncIOScheduler()
 
 BOT_COMMANDS_TO_DISPLAY = get_bot_commands_to_display(BOT_COMMANDS)
 
 
-@dispatcher.message(CommandStart())
+# Default commands handlers
+
+
+@dp.message(CommandStart())
 async def start_handler(message: Message, state: FSMContext) -> None:
     """Handler for /start command - greets the user"""
 
@@ -56,7 +58,7 @@ async def start_handler(message: Message, state: FSMContext) -> None:
     await send_month_choosing_instruction(message)
 
 
-@dispatcher.message(Command("help"))
+@dp.message(Command("help"))
 async def help_handler(message: Message) -> None:
     """Handler for /help command - show all commands for the user"""
 
@@ -64,7 +66,10 @@ async def help_handler(message: Message) -> None:
     await send_month_choosing_instruction(message)
 
 
-@dispatcher.message(Command("all_holidays"))
+# Holidays commands handlers
+
+
+@dp.message(Command("all_holidays"))
 async def all_holidays_handler(message: Message) -> None:
     """Handler for /all_holidays command.
 
@@ -75,7 +80,7 @@ async def all_holidays_handler(message: Message) -> None:
     await send_sql_query_result_to_user(message, ALL_HOLIDAYS_SQL_QUERY)
 
 
-@dispatcher.message(Command("this_month_holidays"))
+@dp.message(Command("this_month_holidays"))
 async def this_month_holidays_handler(message: Message) -> None:
     """Handler for /this_month_holidays command.
 
@@ -86,7 +91,7 @@ async def this_month_holidays_handler(message: Message) -> None:
     await send_sql_query_result_to_user(message, THIS_MONTH_HOLIDAYS_SQL_QUERY)
 
 
-@dispatcher.message(Command("next_month_holidays"))
+@dp.message(Command("next_month_holidays"))
 async def next_month_holidays_handler(message: Message) -> None:
     """Handler for /next_month_holidays command.
 
@@ -97,7 +102,51 @@ async def next_month_holidays_handler(message: Message) -> None:
     await send_sql_query_result_to_user(message, NEXT_MONTH_HOLIDAYS_SQL_QUERY)
 
 
-@dispatcher.message(MonthStates.choosing_month, F.text.in_(ALL_MONTHS))
+# Notifications commands handlers
+
+
+@dp.message(Command("add_notification"))
+async def add_notification_handler(message: Message) -> None:
+    """Handler for /add_notification command.
+
+    Add daily notification about today's holiday for the user.
+
+    """
+
+    if await is_daily_notification_exists(message):
+        await message.answer("Вы уже добавили уведомление")
+    else:
+        await message.answer(
+            "Вы точно хотите добавить ежедневное уведомление о праздниках?",
+            reply_markup=get_yes_no_inline_keyboard(
+                yes_btn_name="btn_add_notification"
+            ),
+        )
+
+
+@dp.message(Command("delete_notification"))
+async def delete_notification_handler(message: Message) -> None:
+    """Handler for /delete_notification command.
+
+    Delete daily notification about today's holiday for the user.
+
+    """
+
+    if await is_daily_notification_exists(message):
+        await message.answer(
+            "Вы точно хотите удалить уведомление?",
+            reply_markup=get_yes_no_inline_keyboard(
+                yes_btn_name="btn_delete_notification"
+            ),
+        )
+    else:
+        await message.answer("У вас нет уведомления")
+
+
+# States handlers
+
+
+@dp.message(MonthStates.choosing_month, F.text.in_(ALL_MONTHS))
 async def specified_month_handler(message: Message):
     """Handler for choosing specified month.
 
@@ -112,16 +161,48 @@ async def specified_month_handler(message: Message):
     )
 
 
+# Buttons handlers
+
+
+@dp.callback_query(F.data == "btn_add_notification")
+async def process_callback_btn_add_notification(
+    callback_query: CallbackQuery,
+) -> None:
+    """Handler for button «btn_add_notification» click.
+
+    Add user's notification to DB and add the job.
+
+    """
+
+    message = callback_query.message
+
+    await add_new_daily_notification_to_db(message)
+    await add_daily_job(scheduler, str(message.chat.id))
+
+
+@dp.callback_query(F.data == "btn_delete_notification")
+async def process_callback_btn_delete_notification(
+    callback_query: CallbackQuery,
+) -> None:
+    """Handler for button «btn_delete_notification» click.
+
+    Delete user's notification from DB and delete the job.
+
+    """
+
+    message = callback_query.message
+
+    await delete_daily_notification_from_db(message)
+    scheduler.remove_job(str(message.chat.id))
+
+
 async def main() -> None:
     """Main function that runs the bot"""
 
     try:
-        bot = Bot(
-            TOKEN, default=DefaultBotProperties(parse_mode=ParseMode.HTML)
-        )
-
-        await bot.set_my_commands(BOT_COMMANDS)
-        await dispatcher.start_polling(bot)
+        asyncio.create_task(run_scheduler(scheduler))
+        await BOT.set_my_commands(BOT_COMMANDS)
+        await dp.start_polling(BOT)
     except Exception as error:
         logger.error(error)
 
@@ -137,4 +218,4 @@ if __name__ == "__main__":
         ),
         datefmt="%F %T",
     )
-    run(main())
+    asyncio.run(main())

@@ -5,13 +5,17 @@ from logging import getLogger
 from math import ceil
 from typing import Dict, List
 
-from constants import ERROR_MESSAGE
+from aiogram.types import FSInputFile, Message
+
+from constants.constants import ERROR_MESSAGE
 from custom_types import TypeHoliday
 
 logger = getLogger(__name__)
 
 
-async def get_formatted_holidays(holidays: List[TypeHoliday]) -> str:
+async def get_formatted_holidays(
+    holidays: List[TypeHoliday], is_notification=False
+) -> str:
     """Return holidays in necessary format"""
 
     formatted_holidays = ""
@@ -23,8 +27,16 @@ async def get_formatted_holidays(holidays: List[TypeHoliday]) -> str:
         )
         return ERROR_MESSAGE
 
-    for holiday in holidays:
-        formatted_holidays += await _get_formatted_single_holiday(holiday)
+    if is_notification:
+        formatted_holidays = "Привет! 👋"
+
+        for holiday in holidays:
+            formatted_holidays += "\n\n" + (
+                await _get_formatted_single_holiday_for_notification(holiday)
+            )
+    else:
+        for holiday in holidays:
+            formatted_holidays += await _get_formatted_single_holiday(holiday)
 
     return formatted_holidays
 
@@ -57,6 +69,35 @@ async def _get_formatted_single_holiday(holiday: TypeHoliday) -> str:
         text += f"🎉 <u>Кого поздравляем:</u> {whom_to_congratulate}"
 
     return text + "\n\n"
+
+
+async def _get_formatted_single_holiday_for_notification(
+    holiday: TypeHoliday,
+) -> str:
+    """Format holiday text and return"""
+
+    if not isinstance(holiday, tuple):
+        logger.error(
+            "Wrong «holiday» type - %hd "
+            "(«_get_formatted_single_holiday» func)",
+            holiday,
+        )
+        return ""
+
+    holiday_date, title, is_birthday, whom_to_congratulate = holiday
+
+    if is_birthday:
+        age = _get_person_age(holiday_date)
+        age_suffix = await _get_age_suffix(age)
+
+        text = f"Сегодня <b>{title}</b>.\n"
+        text += f"Исполнилось <b>{age} {age_suffix}</b>\n"
+        text += "Не забудь поздравить! 🎉"
+    else:
+        text = f"Сегодня праздник - <b>{title}</b>\n"
+        text += f"Не забудь поздравить причастных 🎉: {whom_to_congratulate}"
+
+    return text
 
 
 async def _get_days_left(holiday_date: date) -> int | str:
@@ -112,3 +153,20 @@ def get_bot_commands_to_display(bot_commands: List[Dict[str, str]]) -> str:
             for command in bot_commands
         ]
     )
+
+
+async def send_month_choosing_instruction(message: Message) -> None:
+    """Send instruction about month choosing"""
+
+    await message.answer_photo(
+        FSInputFile("photos/month_choosing_button.png"),
+        "Также ты можешь получить <u>праздники в конкретном месяце</u>."
+        " Для этого нажми на эту кнопку 👆",
+    )
+
+
+async def _get_person_age(birthday: date) -> int:
+    """Return age for person by birthday"""
+
+    # TODO: Fix
+    return ceil((date.today() - birthday).days / 365)

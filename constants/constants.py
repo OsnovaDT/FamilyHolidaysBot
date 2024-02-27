@@ -1,9 +1,14 @@
 """Constants of the project"""
 
+from aiogram import Bot
+from aiogram.client.default import DefaultBotProperties
+from aiogram.enums import ParseMode
 from decouple import config
 from mysql.connector import connect
 
 TOKEN = config("TOKEN")
+
+BOT = Bot(TOKEN, default=DefaultBotProperties(parse_mode=ParseMode.HTML))
 
 BOT_COMMANDS = [
     {
@@ -20,29 +25,19 @@ BOT_COMMANDS = [
         "command": "next_month_holidays",
         "description": "Праздники в следующем месяце",
     },
+    {
+        "command": "add_notification",
+        "description": "Добавить ежедневное оповещение о праздниках",
+    },
+    {
+        "command": "change_notification_time",
+        "description": "Изменить время ежедневного оповещения о праздниках",
+    },
+    {
+        "command": "delete_notification",
+        "description": "Удалить ежедневное оповещение о праздниках",
+    },
 ]
-
-HOLIDAYS_SQL_QUERY = """
-SELECT date_of_holiday, title, is_birthday, whom_to_congratulate
-FROM holidays
-{where_condition}
-ORDER BY MONTH(date_of_holiday), DAY(date_of_holiday);
-"""
-
-ALL_HOLIDAYS_SQL_QUERY = HOLIDAYS_SQL_QUERY.format(where_condition="")
-
-THIS_MONTH_HOLIDAYS_SQL_QUERY = HOLIDAYS_SQL_QUERY.format(
-    where_condition="WHERE MONTH(date_of_holiday) = MONTH(CURRENT_DATE())"
-)
-
-NEXT_MONTH_HOLIDAYS_SQL_QUERY = HOLIDAYS_SQL_QUERY.format(
-    where_condition="WHERE MONTH(date_of_holiday) = MONTH(CURRENT_DATE()"
-    " + INTERVAL 1 MONTH)"
-)
-
-SPECIFIED_MONTH_HOLIDAYS_SQL_QUERY = HOLIDAYS_SQL_QUERY.format(
-    where_condition="WHERE MONTH(date_of_holiday) = {month}"
-)
 
 DB_CONNECT = connect(
     host=config("DB_HOST"),
