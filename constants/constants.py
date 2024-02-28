@@ -30,7 +30,7 @@ BOT_COMMANDS = [
         "description": "Добавить ежедневное оповещение о праздниках",
     },
     {
-        "command": "change_notification_time",
+        "command": "change_notification",
         "description": "Изменить время ежедневного оповещения о праздниках",
     },
     {

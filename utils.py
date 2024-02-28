@@ -1,9 +1,10 @@
 """Utils of the project"""
 
-from datetime import date
+from datetime import date, timedelta
 from logging import getLogger
 from math import ceil
-from typing import Dict, List
+from re import match
+from typing import Dict, List, Tuple
 
 from aiogram.types import FSInputFile, Message
 
@@ -119,6 +120,7 @@ async def _get_days_left(holiday_date: date) -> int | str:
 async def _get_age_suffix(age: int | str) -> str:
     """Return suffix for the age.
 
+    >>> get_age_suffix('test') = ''
     >>> get_age_suffix(-1) = ''
     >>> get_age_suffix(14) = 'лет'
     >>> get_age_suffix(21) = 'год'
@@ -128,13 +130,17 @@ async def _get_age_suffix(age: int | str) -> str:
 
     suffix = "лет"
 
-    if not isinstance(age, (int, str)) or int(age) <= 0:
+    if (
+        not isinstance(age, (int, str))
+        or not str(age).isdigit()
+        or int(age) <= 0
+    ):
         return ""
 
-    age = str(age)
+    is_age_from_10_to_19 = int(age) >= 10 and int(age) <= 19
 
-    if not (age.startswith("1") and len(age) == 2):
-        last_digit = age[-1]
+    if not is_age_from_10_to_19:
+        last_digit = str(age)[-1]
 
         if last_digit == "1":
             suffix = "год"
@@ -170,3 +176,33 @@ async def _get_person_age(birthday: date) -> int:
 
     # TODO: Fix
     return ceil((date.today() - birthday).days / 365)
+
+
+async def is_daily_notification_time_correct(time_: str) -> bool:
+    """Check daily notification time to make sure it is in the correct format.
+
+    >>> is_daily_notification_time_correct('3:30') is True
+    >>> is_daily_notification_time_correct('22:05') is True
+    >>> is_daily_notification_time_correct('12:60') is False
+    >>> is_daily_notification_time_correct('test1') is False
+
+    """
+
+    if not isinstance(time_, str):
+        return False
+
+    # Format - hh:mm
+    time_format = r"^([01]?[0-9]|2[0-3]):[0-5][0-9]$"
+
+    return bool(match(time_format, time_))
+
+
+async def get_hours_and_minutes_from_seconds_delta(
+    delta: timedelta,
+) -> Tuple[int, int]:
+    """Return hours and minutes from seconds in timedelta"""
+
+    hours = delta.seconds // 3_600
+    minutes = (delta.seconds % 3_600) // 60
+
+    return hours, minutes

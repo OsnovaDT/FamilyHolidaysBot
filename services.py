@@ -1,6 +1,7 @@
 """All business-logic of the project"""
 
 from logging import getLogger
+from typing import Dict, Tuple
 
 from aiogram.types import FSInputFile, Message
 from mysql.connector import Error
@@ -8,12 +9,16 @@ from mysql.connector import Error
 from constants.constants import DB_CONNECT, ERROR_MESSAGE
 from constants.queries import (
     ADD_DAILY_NOTIFICATIONS_QUERY,
+    CHANGE_DAILY_NOTIFICATION_TIME_QUERY,
     DELETE_DAILY_NOTIFICATIONS_QUERY,
-    GET_DAILY_NOTIFICATIONS_CHATS_IDS_QUERY,
+    GET_DAILY_NOTIFICATIONS_QUERY,
     IS_EXISTS_DAILY_NOTIFICATIONS_QUERY,
     TODAYS_HOLIDAYS_SQL_QUERY,
 )
-from utils import get_formatted_holidays
+from utils import (
+    get_formatted_holidays,
+    get_hours_and_minutes_from_seconds_delta,
+)
 
 cursor = DB_CONNECT.cursor()
 
@@ -60,13 +65,18 @@ async def is_daily_notification_exists(message: Message) -> bool:
         )
 
 
-async def get_daily_notifications_chats_ids() -> None:
+async def get_daily_notifications_from_db() -> Dict[str, Tuple[int, int]]:
     """Return all chat ids for daily notifications"""
 
     try:
-        cursor.execute(GET_DAILY_NOTIFICATIONS_CHATS_IDS_QUERY)
+        cursor.execute(GET_DAILY_NOTIFICATIONS_QUERY)
 
-        return tuple(chat_id[0] for chat_id in cursor.fetchall())
+        return {
+            notification[0]: await get_hours_and_minutes_from_seconds_delta(
+                notification[1]
+            )
+            for notification in cursor.fetchall()
+        }
     except Error as error:
         logger.error(error)
 
@@ -117,6 +127,32 @@ async def send_today_holidays(bot, chat_id: str) -> None:
         if holidays:
             holidays_info = await get_formatted_holidays(holidays, True)
             await bot.send_message(chat_id=chat_id, text=holidays_info)
+    except Error as error:
+        logger.error(error)
+        await bot.answer_photo(
+            FSInputFile("photos/tinkoff.jpg"),
+            ERROR_MESSAGE,
+        )
+
+
+async def change_daily_notification_time_in_db(
+    bot, new_time: str, chat_id: str
+) -> None:
+    """Change daily notification's time to new time from user"""
+
+    try:
+        cursor.execute(
+            CHANGE_DAILY_NOTIFICATION_TIME_QUERY.format(
+                new_time=new_time,
+                chat_id=chat_id,
+            )
+        )
+        DB_CONNECT.commit()
+
+        await bot.send_message(
+            chat_id=chat_id,
+            text=f"Время ежедневного уведомления изменено на {new_time}!",
+        )
     except Error as error:
         logger.error(error)
         await bot.answer_photo(

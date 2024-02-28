@@ -20,12 +20,17 @@ from jobs import add_daily_job, run_scheduler
 from keyboards import get_months_keyboard, get_yes_no_inline_keyboard
 from services import (
     add_new_daily_notification_to_db,
+    change_daily_notification_time_in_db,
     delete_daily_notification_from_db,
     is_daily_notification_exists,
     send_sql_query_result_to_user,
 )
-from states import MonthStates
-from utils import get_bot_commands_to_display, send_month_choosing_instruction
+from states import MonthStates, NotificationStates
+from utils import (
+    get_bot_commands_to_display,
+    is_daily_notification_time_correct,
+    send_month_choosing_instruction,
+)
 
 dp = Dispatcher()
 logger = getLogger(__name__)
@@ -124,6 +129,28 @@ async def add_notification_handler(message: Message) -> None:
         )
 
 
+@dp.message(Command("change_notification"))
+async def change_notification_handler(
+    message: Message, state: FSMContext
+) -> None:
+    """Handler for /change_notification command.
+
+    Allow to change the notification's time.
+
+    """
+
+    if await is_daily_notification_exists(message):
+        await message.answer(
+            "Напишите новое время для уведомления.\nПример - <b>12:30</b>"
+        )
+        await state.set_state(NotificationStates.awaiting_new_time)
+    else:
+        await message.answer(
+            "У вас не подключена отправка уведомления."
+            "Вы можете подключить ее с помощью команды /add_notification",
+        )
+
+
 @dp.message(Command("delete_notification"))
 async def delete_notification_handler(message: Message) -> None:
     """Handler for /delete_notification command.
@@ -161,6 +188,30 @@ async def specified_month_handler(message: Message):
     )
 
 
+@dp.message(NotificationStates.awaiting_new_time)
+async def daily_notification_time_handler(message: Message, state: FSMContext):
+    """Handler for choosing daily notification's time.
+
+    Change time for user's daily notification.
+
+    """
+
+    new_time = message.text
+    chat_id = str(message.chat.id)
+
+    if await is_daily_notification_time_correct(new_time):
+        await change_daily_notification_time_in_db(BOT, new_time, chat_id)
+
+        new_time = [int(item) for item in new_time.split(":")]
+
+        scheduler.remove_job(chat_id)
+        await add_daily_job(scheduler, chat_id, new_time)
+
+        await state.clear()
+    else:
+        await message.answer("Формат некорректный")
+
+
 # Buttons handlers
 
 
@@ -177,7 +228,8 @@ async def process_callback_btn_add_notification(
     message = callback_query.message
 
     await add_new_daily_notification_to_db(message)
-    await add_daily_job(scheduler, str(message.chat.id))
+    # TODO: Добавить возможность выбора времени
+    await add_daily_job(scheduler, str(message.chat.id), [9, 0])
 
 
 @dp.callback_query(F.data == "btn_delete_notification")
